@@ -644,6 +644,18 @@ MCIERROR WINAPI fake_mciSendStringA(LPCTSTR cmd, LPTSTR ret, UINT cchReturn, HAN
         fake_mciSendCommandA(MAGIC_DEVICEID, MCI_STOP, 0, (DWORD_PTR)NULL);
         return 0;
     }
+	
+	    /* Handle "stop cdaudio/alias" */
+    if (strstr(cmdbuf, "type stop alias"))
+    {
+        char *tmp_s = strrchr(cmdbuf, ' ');
+        if (tmp_s && *(tmp_s +1))
+        {
+            sprintf(alias_s, "%s", tmp_s +1);
+        }
+        fake_mciSendCommandA(MAGIC_DEVICEID, MCI_STOP, 0, (DWORD_PTR)NULL);
+        return 0;
+    }
 
     /* Handle "pause cdaudio/alias" */
     sprintf(cmp_str, "pause %s", alias_s);
@@ -734,7 +746,7 @@ MCIERROR WINAPI fake_mciSendStringA(LPCTSTR cmd, LPTSTR ret, UINT cchReturn, HAN
             static MCI_STATUS_PARMS parms;
             parms.dwItem = MCI_STATUS_LENGTH;
             parms.dwTrack = track;
-            fake_mciSendCommandA(MAGIC_DEVICEID, MCI_STATUS, MCI_STATUS_ITEM|MCI_TRACK, (DWORD_PTR)&parms);
+            fake_mciSendCommandA(MAGIC_DEVICEID, MCI_STATUS, MCI_STATUS_ITEM|MCI_TRACK|MCI_WAIT, (DWORD_PTR)&parms);
             sprintf(ret, "%d", parms.dwReturn);
             return 0;
         }
@@ -743,6 +755,15 @@ MCIERROR WINAPI fake_mciSendStringA(LPCTSTR cmd, LPTSTR ret, UINT cchReturn, HAN
             static MCI_STATUS_PARMS parms;
             parms.dwItem = MCI_STATUS_LENGTH;
             fake_mciSendCommandA(MAGIC_DEVICEID, MCI_STATUS, MCI_STATUS_ITEM, (DWORD_PTR)&parms);
+            sprintf(ret, "%d", parms.dwReturn);
+            return 0;
+        }
+        if (strstr(cmdbuf, "type track"))
+        {
+            static MCI_STATUS_PARMS parms;
+            parms.dwItem = MCI_CDA_STATUS_TYPE_TRACK;
+			parms.dwTrack = track;
+            fake_mciSendCommandA(MAGIC_DEVICEID, MCI_STATUS, MCI_STATUS_ITEM|MCI_TRACK, (DWORD_PTR)&parms);
             sprintf(ret, "%d", parms.dwReturn);
             return 0;
         }
