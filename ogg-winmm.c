@@ -131,7 +131,7 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
         {
             *last = '\0';
         }
-        strncat(music_path, "\\MUSIC", sizeof music_path - 1);
+        strncat(music_path, "\\tamus", sizeof music_path - 1);
 
         dprintf("ogg-winmm music directory is %s\r\n", music_path);
         dprintf("ogg-winmm searching tracks...\r\n");
@@ -140,7 +140,7 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
 
         for (int i = 1; i < MAX_TRACKS; i++) /* "Changed: int i = 0" to "1" we can skip track00.ogg" */
         {
-            snprintf(tracks[i].path, sizeof tracks[i].path, "%s\\Track%02d.ogg", music_path, i);
+			snprintf(tracks[i].path, sizeof tracks[i].path, "%s\\%02d.ogg", music_path, i);
             tracks[i].length = plr_length(tracks[i].path);
             tracks[i].position = position;
 
@@ -652,6 +652,18 @@ MCIERROR WINAPI fake_mciSendStringA(LPCTSTR cmd, LPTSTR ret, UINT cchReturn, HAN
         fake_mciSendCommandA(MAGIC_DEVICEID, MCI_PAUSE, 0, (DWORD_PTR)NULL);
         return 0;
     }
+	
+    /* Handle "pause cdaudio/alias" */
+    if (strstr(cmdbuf, "type pause alias"))
+    {
+        char *tmp_s = strrchr(cmdbuf, ' ');
+        if (tmp_s && *(tmp_s +1))
+        {
+            sprintf(alias_s, "%s", tmp_s +1);
+        }
+        fake_mciSendCommandA(MAGIC_DEVICEID, MCI_PAUSE, 0, (DWORD_PTR)NULL);
+        return 0;
+    }
 
     /* Look for the use of an alias */
     /* Example: "open d: type cdaudio alias cd1" */
@@ -677,6 +689,7 @@ MCIERROR WINAPI fake_mciSendStringA(LPCTSTR cmd, LPTSTR ret, UINT cchReturn, HAN
     if (strstr(cmdbuf, cmp_str))
     {
         sprintf(alias_s, "cdaudio");
+        fake_mciSendCommandA(MAGIC_DEVICEID, MCI_CLOSE, 0, (DWORD_PTR)NULL);
         return 0;
     }
 
@@ -690,17 +703,17 @@ MCIERROR WINAPI fake_mciSendStringA(LPCTSTR cmd, LPTSTR ret, UINT cchReturn, HAN
             fake_mciSendCommandA(MAGIC_DEVICEID, MCI_SET, MCI_SET_TIME_FORMAT, (DWORD_PTR)&parms);
             return 0;
         }
-        if (strstr(cmdbuf, "tmsf"))
-        {
-            static MCI_SET_PARMS parms;
-            parms.dwTimeFormat = MCI_FORMAT_TMSF;
-            fake_mciSendCommandA(MAGIC_DEVICEID, MCI_SET, MCI_SET_TIME_FORMAT, (DWORD_PTR)&parms);
-            return 0;
-        }
         if (strstr(cmdbuf, "msf"))
         {
             static MCI_SET_PARMS parms;
             parms.dwTimeFormat = MCI_FORMAT_MSF;
+            fake_mciSendCommandA(MAGIC_DEVICEID, MCI_SET, MCI_SET_TIME_FORMAT, (DWORD_PTR)&parms);
+            return 0;
+        }
+        if (strstr(cmdbuf, "tmsf"))
+        {
+            static MCI_SET_PARMS parms;
+            parms.dwTimeFormat = MCI_FORMAT_TMSF;
             fake_mciSendCommandA(MAGIC_DEVICEID, MCI_SET, MCI_SET_TIME_FORMAT, (DWORD_PTR)&parms);
             return 0;
         }
@@ -750,22 +763,17 @@ MCIERROR WINAPI fake_mciSendStringA(LPCTSTR cmd, LPTSTR ret, UINT cchReturn, HAN
             sprintf(ret, "%d", parms.dwReturn);
             return 0;
         }
+        if (strstr(cmdbuf, "mode"))
+        {
+            static MCI_STATUS_PARMS parms;
+            parms.dwItem = MCI_STATUS_MODE;
+            fake_mciSendCommandA(MAGIC_DEVICEID, MCI_STATUS, MCI_STATUS_ITEM|MCI_STATUS_MODE, (DWORD_PTR)&parms);
+            sprintf(ret, "%d", parms.dwReturn);
+            return 0;
+        }
         if (strstr(cmdbuf, "media present"))
         {
             strcpy(ret, "TRUE");
-            return 0;
-        }
-        /* Add: Mode handling */
-        if (strstr(cmdbuf, "mode"))
-        {
-            if(paused || !playing){
-                dprintf("   -> stopped\r\n");
-                strcpy(ret, "stopped");
-                }
-            else{
-                dprintf("   -> playing\r\n");
-                strcpy(ret, "playing");
-            }
             return 0;
         }
     }
