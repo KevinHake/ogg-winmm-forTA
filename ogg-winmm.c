@@ -327,6 +327,7 @@ MCIERROR WINAPI fake_mciSendCommandA(MCIDEVICEID IDDevice, UINT uMsg, DWORD_PTR 
                 else if (time_format == MCI_FORMAT_MILLISECONDS)
                 {
                     info.first = 0;
+					
 
                     for (int i = 0; i < MAX_TRACKS; i++)
                     {
@@ -460,6 +461,11 @@ MCIERROR WINAPI fake_mciSendCommandA(MCIDEVICEID IDDevice, UINT uMsg, DWORD_PTR 
                 dprintf("        Return: %s\r\n", parms->lpstrReturn);
             }
         }
+		
+		if (uMsg == MCI_INFO)
+		{
+			dprintf("  MCI_INFO\r\n");
+		}
 
         if (uMsg == MCI_STATUS)
         {
@@ -749,7 +755,7 @@ MCIERROR WINAPI fake_mciSendStringA(LPCTSTR cmd, LPTSTR ret, UINT cchReturn, HAN
             sprintf(ret, "%d", parms.dwReturn);
             return 0;
         }
-        if (strstr(cmdbuf, "type track"))
+        if (sscanf(cmdbuf, "status %*s type track %d", &track) == 1)
         {
             static MCI_STATUS_PARMS parms;
             parms.dwItem = MCI_CDA_STATUS_TYPE_TRACK;
