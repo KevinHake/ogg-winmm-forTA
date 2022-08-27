@@ -644,18 +644,6 @@ MCIERROR WINAPI fake_mciSendStringA(LPCTSTR cmd, LPTSTR ret, UINT cchReturn, HAN
         fake_mciSendCommandA(MAGIC_DEVICEID, MCI_STOP, 0, (DWORD_PTR)NULL);
         return 0;
     }
-	
-	    /* Handle "stop cdaudio/alias" */
-    if (strstr(cmdbuf, "type stop alias"))
-    {
-        char *tmp_s = strrchr(cmdbuf, ' ');
-        if (tmp_s && *(tmp_s +1))
-        {
-            sprintf(alias_s, "%s", tmp_s +1);
-        }
-        fake_mciSendCommandA(MAGIC_DEVICEID, MCI_STOP, 0, (DWORD_PTR)NULL);
-        return 0;
-    }
 
     /* Handle "pause cdaudio/alias" */
     sprintf(cmp_str, "pause %s", alias_s);
@@ -736,6 +724,9 @@ MCIERROR WINAPI fake_mciSendStringA(LPCTSTR cmd, LPTSTR ret, UINT cchReturn, HAN
     if (strstr(cmdbuf, cmp_str)){
         if (strstr(cmdbuf, "number of tracks"))
         {
+            static MCI_STATUS_PARMS parms;
+            parms.dwItem = MCI_STATUS_NUMBER_OF_TRACKS;
+            fake_mciSendCommandA(MAGIC_DEVICEID, MCI_STATUS, MCI_STATUS_ITEM|MCI_WAIT, (DWORD_PTR)&parms);
             dprintf("  Returning number of tracks (%d)\r\n", numTracks);
             sprintf(ret, "%d", numTracks);
             return 0;
