@@ -701,31 +701,35 @@ MCIERROR WINAPI fake_mciSendStringA(LPCTSTR cmd, LPTSTR ret, UINT cchReturn, HAN
 
     /* Handle "set cdaudio/alias time format" */
     sprintf(cmp_str, "set %s time format", alias_s);
+	DWORD dwNewTimeFormat = -1;
     if (strstr(cmdbuf, "time format")){
+		static MCI_SET_PARMS parms;
 		char format[81];
 		strcpy(format, "");
 		sscanf(cmdbuf, "time format %s", format);
 		if (sscanf(format, "tmsf"))
         {
-            static MCI_SET_PARMS parms;
-            parms.dwTimeFormat = MCI_FORMAT_TMSF;
-            fake_mciSendCommandA(MAGIC_DEVICEID, MCI_SET, MCI_SET_TIME_FORMAT, (DWORD_PTR)&parms);
-            return 0;
+			dwNewTimeFormat = MCI_FORMAT_TMSF;
         }
         else if (sscanf(format, "msf"))
         {
-            static MCI_SET_PARMS parms;
-            parms.dwTimeFormat = MCI_FORMAT_MSF;
-            fake_mciSendCommandA(MAGIC_DEVICEID, MCI_SET, MCI_SET_TIME_FORMAT, (DWORD_PTR)&parms);
-            return 0;
+			dwNewTimeFormat = MCI_FORMAT_MSF;
         }
 		else if (sscanf(format, "milliseconds"))
         {
-            static MCI_SET_PARMS parms;
-            parms.dwTimeFormat = MCI_FORMAT_MILLISECONDS;
-            fake_mciSendCommandA(MAGIC_DEVICEID, MCI_SET, MCI_SET_TIME_FORMAT, (DWORD_PTR)&parms);
-            return 0;
+			dwNewTimeFormat = MCI_FORMAT_MILLISECONDS;
         }
+		
+		if(dwNewTimeFormat == -1)
+		{
+			dprintf("unknown time format");
+		}
+		else
+		{
+			static MCI_SET_PARMS parms;
+			fake_mciSendCommandA(MAGIC_DEVICEID, MCI_SET, dwNewTimeFormat, (DWORD_PTR)(LPVOID)&parms);
+			return 0;
+		}
     }
 
     /* Handle "status cdaudio/alias" */
