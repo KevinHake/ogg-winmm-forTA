@@ -727,7 +727,8 @@ MCIERROR WINAPI fake_mciSendStringA(LPCTSTR cmd, LPTSTR ret, UINT cchReturn, HAN
 		else
 		{
 			static MCI_SET_PARMS parms;
-			fake_mciSendCommandA(MAGIC_DEVICEID, MCI_SET, dwNewTimeFormat, (DWORD_PTR)(LPVOID)&parms);
+			parms.dwTimeFormat = dwNewTimeFormat;
+			fake_mciSendCommandA(MAGIC_DEVICEID, MCI_SET, MCI_SET_TIME_FORMAT, (DWORD_PTR)(LPVOID)&parms);
 			return 0;
 		}
     }
