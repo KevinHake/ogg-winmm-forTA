@@ -17,6 +17,7 @@
 /* Code revised by DD (2020) (v.0.2.0.2) */
 
 #include <windows.h>
+#include <winreg.h>
 #include <stdio.h>
 #include <ctype.h>
 #include <dirent.h>
@@ -554,7 +555,7 @@ MCIERROR WINAPI fake_mciSendCommandA(MCIDEVICEID IDDevice, UINT uMsg, DWORD_PTR 
                         if (time_format == MCI_FORMAT_MILLISECONDS)
                             /* FIXME: implying milliseconds */
                             parms->dwReturn = tracks[parms->dwTrack].position * 1000;
-                        else /* TMSF */
+                        else if(time_format == MCI_FORMAT_TMSF)
                             parms->dwReturn = MCI_MAKE_TMSF(parms->dwTrack, 0, 0, 0);
                     }
                     else {
@@ -562,7 +563,7 @@ MCIERROR WINAPI fake_mciSendCommandA(MCIDEVICEID IDDevice, UINT uMsg, DWORD_PTR 
                         int track = current % 0xFF;
                         if (time_format == MCI_FORMAT_MILLISECONDS)
                             parms->dwReturn = tracks[track].position * 1000;
-                        else /* TMSF */
+                        else if(time_format == MCI_FORMAT_TMSF)
                             parms->dwReturn = MCI_MAKE_TMSF(track, 0, 0, 0);
                     }
                 }
@@ -624,6 +625,10 @@ MCIERROR WINAPI fake_mciSendStringA(LPCTSTR cmd, LPTSTR ret, UINT cchReturn, HAN
 		char *sCmdTarget;
 		DWORD dwCommand;
 		
+		char format[81];
+		DWORD dwRqTimeFormat = 0;
+		DWORD dwNewTimeFormat = -1;
+		
 		char cmdbuf[1024];
 		char cmp_str[1024];
 
@@ -659,7 +664,7 @@ MCIERROR WINAPI fake_mciSendStringA(LPCTSTR cmd, LPTSTR ret, UINT cchReturn, HAN
 			cmdbuf[i] = tolower(cmdbuf[i]);
 		}
 
-		if (strstr(cmdbuf, "sysinfo cdaudio quantity"))
+		if (strstr(cmd, "sysinfo cdaudio quantity"))
 		{
 			dprintf("  Returning quantity: 1\r\n");
 			strcpy(ret, "1");
@@ -667,7 +672,7 @@ MCIERROR WINAPI fake_mciSendStringA(LPCTSTR cmd, LPTSTR ret, UINT cchReturn, HAN
 		}
 
 		/* Example: "sysinfo cdaudio name 1 open" returns "cdaudio" or the alias.*/
-		if (strstr(cmdbuf, "sysinfo cdaudio name"))
+		if (strstr(cmd, "sysinfo cdaudio name"))
 		{
 			dprintf("  Returning name: cdaudio\r\n");
 			sprintf(ret, "%s", alias_s);
@@ -676,7 +681,7 @@ MCIERROR WINAPI fake_mciSendStringA(LPCTSTR cmd, LPTSTR ret, UINT cchReturn, HAN
 
 		/* Handle "stop cdaudio/alias" */
 		sprintf(cmp_str, "stop %s", alias_s);
-		if (strstr(cmdbuf, cmp_str))
+		if (strstr(cmd, cmp_str))
 		{
 			fake_mciSendCommandA(MAGIC_DEVICEID, MCI_STOP, 0, (DWORD_PTR)NULL);
 			return 0;
@@ -684,16 +689,16 @@ MCIERROR WINAPI fake_mciSendStringA(LPCTSTR cmd, LPTSTR ret, UINT cchReturn, HAN
 
 		/* Handle "pause cdaudio/alias" */
 		sprintf(cmp_str, "pause %s", alias_s);
-		if (strstr(cmdbuf, cmp_str))
+		if (strstr(cmd, cmp_str))
 		{
 			fake_mciSendCommandA(MAGIC_DEVICEID, MCI_PAUSE, 0, (DWORD_PTR)NULL);
 			return 0;
 		}
 	
 		/* Handle "pause cdaudio/alias" */
-		if (strstr(cmdbuf, "type pause alias"))
+		if (strstr(cmd, "type pause alias"))
 		{
-			char *tmp_s = strrchr(cmdbuf, ' ');
+			char *tmp_s = strrchr(cmd, ' ');
 			if (tmp_s && *(tmp_s +1))
 			{
 				sprintf(alias_s, "%s", tmp_s +1);
@@ -704,9 +709,9 @@ MCIERROR WINAPI fake_mciSendStringA(LPCTSTR cmd, LPTSTR ret, UINT cchReturn, HAN
 
 		/* Look for the use of an alias */
 		/* Example: "open d: type cdaudio alias cd1" */
-		if (strstr(cmdbuf, "type cdaudio alias"))
+		if (strstr(cmd, "type cdaudio alias"))
 		{
-			char *tmp_s = strrchr(cmdbuf, ' ');
+			char *tmp_s = strrchr(cmd, ' ');
 			if (tmp_s && *(tmp_s +1))
 			{
 				sprintf(alias_s, "%s", tmp_s +1);
@@ -715,7 +720,7 @@ MCIERROR WINAPI fake_mciSendStringA(LPCTSTR cmd, LPTSTR ret, UINT cchReturn, HAN
 			return 0;
 		}
 
-		if (strstr(cmdbuf, "open cdaudio"))
+		if (strstr(cmd, "open cdaudio"))
 		{
 			fake_mciSendCommandA(MAGIC_DEVICEID, MCI_OPEN, 0, (DWORD_PTR)NULL);
 			return 0;
@@ -723,7 +728,7 @@ MCIERROR WINAPI fake_mciSendStringA(LPCTSTR cmd, LPTSTR ret, UINT cchReturn, HAN
 
 		/* reset alias with "close alias" string */
 		sprintf(cmp_str, "close %s", alias_s);
-		if (strstr(cmdbuf, cmp_str))
+		if (strstr(cmd, cmp_str))
 		{
 			sprintf(alias_s, "cdaudio");
 			fake_mciSendCommandA(MAGIC_DEVICEID, MCI_CLOSE, 0, (DWORD_PTR)NULL);
@@ -732,41 +737,37 @@ MCIERROR WINAPI fake_mciSendStringA(LPCTSTR cmd, LPTSTR ret, UINT cchReturn, HAN
 
 		/* Handle "set cdaudio/alias time format" */
 		sprintf(cmp_str, "set %s time format", alias_s);
-		DWORD dwNewTimeFormat = -1;
-		if (strstr(cmdbuf, "time format")){
-			static MCI_SET_PARMS parms;
-			char format[81];
-			strcpy(format, "");
-			sscanf(cmdbuf, "time format %s", format);
-			if (sscanf(format, "tmsf"))
-			{
-				dwNewTimeFormat = MCI_FORMAT_TMSF;
-			}
-			else if (sscanf(format, "msf"))
-			{
-				dwNewTimeFormat = MCI_FORMAT_MSF;
-			}
-			else if (sscanf(format, "milliseconds"))
-			{
-				dwNewTimeFormat = MCI_FORMAT_MILLISECONDS;
-			}
-			if(dwNewTimeFormat == -1)
-			{
-				dprintf("unknown time format");
-			}
-			else
+		if (strstr(cmd, cmp_str))
+		{
+			if (strstr(cmd, "milliseconds"))
 			{
 				static MCI_SET_PARMS parms;
-				parms.dwTimeFormat = dwNewTimeFormat;
-				fake_mciSendCommandA(MAGIC_DEVICEID, MCI_SET, MCI_SET_TIME_FORMAT, (DWORD_PTR)(LPVOID)&parms);
+				parms.dwTimeFormat = MCI_FORMAT_MILLISECONDS;
+				fake_mciSendCommandA(MAGIC_DEVICEID, MCI_SET, MCI_SET_TIME_FORMAT, (DWORD_PTR)&parms);
+				return 0;
+			}
+			else
+			if (strstr(cmd, "tmsf"))
+			{
+				static MCI_SET_PARMS parms;
+				parms.dwTimeFormat = MCI_FORMAT_TMSF;
+				fake_mciSendCommandA(MAGIC_DEVICEID, MCI_SET, MCI_SET_TIME_FORMAT, (DWORD_PTR)&parms);
+				return 0;
+			}
+			else
+			if (strstr(cmd, "msf"))
+			{
+				static MCI_SET_PARMS parms;
+				parms.dwTimeFormat = MCI_FORMAT_MSF;
+				fake_mciSendCommandA(MAGIC_DEVICEID, MCI_SET, MCI_SET_TIME_FORMAT, (DWORD_PTR)&parms);
 				return 0;
 			}
 		}
 
 		/* Handle "status cdaudio/alias" */
 		sprintf(cmp_str, "status %s", alias_s);
-		if (strstr(cmdbuf, cmp_str)){
-			if (strstr(cmdbuf, "number of tracks"))
+		if (strstr(cmd, cmp_str)){
+			if (strstr(cmd, "number of tracks"))
 			{
 				static MCI_STATUS_PARMS parms;
 				parms.dwItem = MCI_STATUS_NUMBER_OF_TRACKS;
@@ -776,7 +777,7 @@ MCIERROR WINAPI fake_mciSendStringA(LPCTSTR cmd, LPTSTR ret, UINT cchReturn, HAN
 				return 0;
 			}
 			int track = 0;
-			if (sscanf(cmdbuf, "status %*s length track %d", &track) == 1)
+			if (sscanf(cmd, "status %*s length track %d", &track) == 1)
 			{
 				static MCI_STATUS_PARMS parms;
 				parms.dwItem = MCI_STATUS_LENGTH;
@@ -785,7 +786,7 @@ MCIERROR WINAPI fake_mciSendStringA(LPCTSTR cmd, LPTSTR ret, UINT cchReturn, HAN
 				sprintf(ret, "%d", parms.dwReturn);
 				return 0;
 			}
-			if (strstr(cmdbuf, "length"))
+			if (strstr(cmd, "length"))
 			{
 				static MCI_STATUS_PARMS parms;
 				parms.dwItem = MCI_STATUS_LENGTH;
@@ -793,7 +794,7 @@ MCIERROR WINAPI fake_mciSendStringA(LPCTSTR cmd, LPTSTR ret, UINT cchReturn, HAN
 				sprintf(ret, "%d", parms.dwReturn);
 				return 0;
 			}
-			if (sscanf(cmdbuf, "status %*s type track %d", &track) == 1)
+			if (sscanf(cmd, "status %*s type track %d", &track) == 1)
 			{
 				static MCI_STATUS_PARMS parms;
 				parms.dwItem = MCI_CDA_STATUS_TYPE_TRACK;
@@ -802,7 +803,7 @@ MCIERROR WINAPI fake_mciSendStringA(LPCTSTR cmd, LPTSTR ret, UINT cchReturn, HAN
 				sprintf(ret, "%d", parms.dwReturn);
 				return 0;
 			}
-			if (sscanf(cmdbuf, "status %*s position track %d", &track) == 1)
+			if (sscanf(cmd, "status %*s position track %d", &track) == 1)
 			{
 				static MCI_STATUS_PARMS parms;
 				parms.dwItem = MCI_STATUS_POSITION;
@@ -811,7 +812,7 @@ MCIERROR WINAPI fake_mciSendStringA(LPCTSTR cmd, LPTSTR ret, UINT cchReturn, HAN
 				sprintf(ret, "%d", parms.dwReturn);
 				return 0;
 			}
-			if (strstr(cmdbuf, "position"))
+			if (strstr(cmd, "position"))
 			{
 				static MCI_STATUS_PARMS parms;
 				parms.dwItem = MCI_STATUS_POSITION;
@@ -819,7 +820,7 @@ MCIERROR WINAPI fake_mciSendStringA(LPCTSTR cmd, LPTSTR ret, UINT cchReturn, HAN
 				sprintf(ret, "%d", parms.dwReturn);
 				return 0;
 			}
-			if (strstr(cmdbuf, "mode"))
+			if (strstr(cmd, "mode"))
 			{
 				static MCI_STATUS_PARMS parms;
 				parms.dwItem = MCI_STATUS_MODE;
@@ -827,7 +828,16 @@ MCIERROR WINAPI fake_mciSendStringA(LPCTSTR cmd, LPTSTR ret, UINT cchReturn, HAN
 				sprintf(ret, "%d", parms.dwReturn);
 				return 0;
 			}
-			if (strstr(cmdbuf, "media present"))
+			if (strstr(cmd, "current"))
+			{
+				static MCI_STATUS_PARMS parms;
+				parms.dwItem = MCI_STATUS_CURRENT_TRACK;
+				parms.dwTrack = track;
+				fake_mciSendCommandA(MAGIC_DEVICEID, MCI_STATUS, MCI_STATUS_ITEM|MCI_TRACK, (DWORD_PTR)&parms);
+				sprintf(ret, "%d", parms.dwReturn);
+				return 0;
+			}
+			if (strstr(cmd, "media present"))
 			{
 				strcpy(ret, "TRUE");
 				return 0;
@@ -837,11 +847,13 @@ MCIERROR WINAPI fake_mciSendStringA(LPCTSTR cmd, LPTSTR ret, UINT cchReturn, HAN
 		/* Handle "play cdaudio/alias" */
 		int from = -1, to = -1;
 		sprintf(cmp_str, "play %s", alias_s);
-		if (strstr(cmdbuf, cmp_str)){
-			if (strstr(cmdbuf, "notify")){
+		if (strstr(cmd, cmp_str))
+		{
+			if (strstr(cmd, "notify"))
+			{
 			notify = 1; /* storing the notify request */
 			}
-			if (sscanf(cmdbuf, "play %*s from %d to %d", &from, &to) == 2)
+			if (sscanf(cmd, "play %*s from %d to %d", &from, &to) == 2)
 			{
 				static MCI_PLAY_PARMS parms;
 				parms.dwFrom = from;
@@ -849,14 +861,14 @@ MCIERROR WINAPI fake_mciSendStringA(LPCTSTR cmd, LPTSTR ret, UINT cchReturn, HAN
 				fake_mciSendCommandA(MAGIC_DEVICEID, MCI_PLAY, MCI_FROM|MCI_TO, (DWORD_PTR)&parms);
 				return 0;
 			}
-			if (sscanf(cmdbuf, "play %*s from %d", &from) == 1)
+			if (sscanf(cmd, "play %*s from %d", &from) == 1)
 			{
 				static MCI_PLAY_PARMS parms;
 				parms.dwFrom = from;
 				fake_mciSendCommandA(MAGIC_DEVICEID, MCI_PLAY, MCI_FROM, (DWORD_PTR)&parms);
 				return 0;
 			}
-			if (sscanf(cmdbuf, "play %*s to %d", &to) == 1)
+			if (sscanf(cmd, "play %*s to %d", &to) == 1)
 			{
 				static MCI_PLAY_PARMS parms;
 				parms.dwTo = to;
@@ -898,7 +910,36 @@ MMRESULT WINAPI fake_auxGetVolume(UINT uDeviceID, LPDWORD lpdwVolume)
 
 MMRESULT WINAPI fake_auxSetVolume(UINT uDeviceID, DWORD dwVolume)
 {
-    static DWORD oldVolume = -1;
+	DWORD registryVolume = 0;
+	DWORD BufferSize;
+	HKEY hlistkey = NULL;
+    HKEY hkey = NULL;
+	int dwIndex=0;
+    char KeyNameBuf[512];
+    DWORD keyNameSizBuf = 512;
+	static DWORD oldVolume = -1;
+	
+    RegOpenKeyEx(HKEY_LOCAL_MACHINE, TEXT("SOFTWARE\\Cavedog Entertainment\\Total Annihilation\\") ,0,KEY_READ, &hlistkey );
+    if(!hlistkey)
+    {
+        dprintf("failed");
+    }
+    while(RegEnumKeyEx(hlistkey,dwIndex++,KeyNameBuf,&keyNameSizBuf,0,NULL,NULL,NULL) == ERROR_SUCCESS )
+    {
+
+        RegOpenKeyEx(hlistkey, KeyNameBuf, 0, KEY_READ | KEY_SET_VALUE, &hkey);
+        if(hkey)
+        {
+            keyNameSizBuf = 512;
+            if(RegQueryValueEx(hkey,TEXT("musicvol"), 0,NULL,(LPVOID)registryVolume,&BufferSize ) == ERROR_SUCCESS )
+            {
+				oldVolume = registryVolume;
+            }
+            RegCloseKey(hkey);
+        }        
+    }
+	
+	oldVolume = registryVolume;
     char cmdbuf[256];
 
     dprintf("fake_auxSetVolume(uDeviceId=%08X, dwVolume=%08X)\r\n", uDeviceID, dwVolume);
