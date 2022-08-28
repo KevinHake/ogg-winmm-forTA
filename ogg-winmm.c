@@ -919,10 +919,10 @@ MMRESULT WINAPI fake_auxSetVolume(UINT uDeviceID, DWORD dwVolume)
     DWORD keyNameSizBuf = 512;
 	static DWORD oldVolume = -1;
 	
-    RegOpenKeyEx(HKEY_LOCAL_MACHINE, TEXT("SOFTWARE\\Cavedog Entertainment\\Total Annihilation\\") ,0,KEY_READ, &hlistkey );
+    RegOpenKeyEx(HKEY_CURRENT_USER, TEXT("SOFTWARE\\Cavedog Entertainment\\Total Annihilation\\") ,0,KEY_READ, &hlistkey );
     if(!hlistkey)
     {
-        dprintf("failed");
+        dprintf("failed to open registry key\r\n");
     }
     while(RegEnumKeyEx(hlistkey,dwIndex++,KeyNameBuf,&keyNameSizBuf,0,NULL,NULL,NULL) == ERROR_SUCCESS )
     {
@@ -930,16 +930,15 @@ MMRESULT WINAPI fake_auxSetVolume(UINT uDeviceID, DWORD dwVolume)
         RegOpenKeyEx(hlistkey, KeyNameBuf, 0, KEY_READ | KEY_SET_VALUE, &hkey);
         if(hkey)
         {
-            keyNameSizBuf = 512;
-            if(RegQueryValueEx(hkey,TEXT("musicvol"), 0,NULL,(LPVOID)registryVolume,&BufferSize ) == ERROR_SUCCESS )
+            if(RegQueryValueEx(hkey,TEXT("musicvol"), NULL,NULL,(LPBYTE)registryVolume,&BufferSize ) == ERROR_SUCCESS )
             {
-				oldVolume = registryVolume;
+				dprintf("music volume\r\n", registryVolume);
+				dwVolume = registryVolume;
             }
             RegCloseKey(hkey);
         }        
     }
 	
-	oldVolume = registryVolume;
     char cmdbuf[256];
 
     dprintf("fake_auxSetVolume(uDeviceId=%08X, dwVolume=%08X)\r\n", uDeviceID, dwVolume);
@@ -949,7 +948,7 @@ MMRESULT WINAPI fake_auxSetVolume(UINT uDeviceID, DWORD dwVolume)
         return MMSYSERR_NOERROR;
     }
 
-    oldVolume = dwVolume;
+    /*oldVolume = dwVolume;*/
 
     unsigned short left = LOWORD(dwVolume);
     unsigned short right = HIWORD(dwVolume);
