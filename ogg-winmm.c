@@ -615,227 +615,257 @@ MCIERROR WINAPI fake_mciSendCommandA(MCIDEVICEID IDDevice, UINT uMsg, DWORD_PTR 
 /* https://docs.microsoft.com/windows/win32/multimedia/multimedia-command-strings */
 MCIERROR WINAPI fake_mciSendStringA(LPCTSTR cmd, LPTSTR ret, UINT cchReturn, HANDLE hwndCallback)
 {
-    char cmdbuf[1024];
-    char cmp_str[1024];
-
-    dprintf("[MCI String = %s]\n", cmd);
-
-    /* copy cmd into cmdbuf */
-    strcpy (cmdbuf,cmd);
-    /* change cmdbuf into lower case */
-    for (int i = 0; cmdbuf[i]; i++)
-    {
-        cmdbuf[i] = tolower(cmdbuf[i]);
-    }
-
-    if (strstr(cmdbuf, "sysinfo cdaudio quantity"))
-    {
-        dprintf("  Returning quantity: 1\r\n");
-        strcpy(ret, "1");
-        return 0;
-    }
-
-    /* Example: "sysinfo cdaudio name 1 open" returns "cdaudio" or the alias.*/
-    if (strstr(cmdbuf, "sysinfo cdaudio name"))
-    {
-        dprintf("  Returning name: cdaudio\r\n");
-        sprintf(ret, "%s", alias_s);
-        return 0;
-    }
-
-    /* Handle "stop cdaudio/alias" */
-    sprintf(cmp_str, "stop %s", alias_s);
-    if (strstr(cmdbuf, cmp_str))
-    {
-        fake_mciSendCommandA(MAGIC_DEVICEID, MCI_STOP, 0, (DWORD_PTR)NULL);
-        return 0;
-    }
-
-    /* Handle "pause cdaudio/alias" */
-    sprintf(cmp_str, "pause %s", alias_s);
-    if (strstr(cmdbuf, cmp_str))
-    {
-        fake_mciSendCommandA(MAGIC_DEVICEID, MCI_PAUSE, 0, (DWORD_PTR)NULL);
-        return 0;
-    }
-	
-    /* Handle "pause cdaudio/alias" */
-    if (strstr(cmdbuf, "type pause alias"))
-    {
-        char *tmp_s = strrchr(cmdbuf, ' ');
-        if (tmp_s && *(tmp_s +1))
-        {
-            sprintf(alias_s, "%s", tmp_s +1);
-        }
-        fake_mciSendCommandA(MAGIC_DEVICEID, MCI_PAUSE, 0, (DWORD_PTR)NULL);
-        return 0;
-    }
-
-    /* Look for the use of an alias */
-    /* Example: "open d: type cdaudio alias cd1" */
-    if (strstr(cmdbuf, "type cdaudio alias"))
-    {
-        char *tmp_s = strrchr(cmdbuf, ' ');
-        if (tmp_s && *(tmp_s +1))
-        {
-            sprintf(alias_s, "%s", tmp_s +1);
-        }
-        fake_mciSendCommandA(MAGIC_DEVICEID, MCI_OPEN, 0, (DWORD_PTR)NULL);
-        return 0;
-    }
-
-    if (strstr(cmdbuf, "open cdaudio"))
-    {
-        fake_mciSendCommandA(MAGIC_DEVICEID, MCI_OPEN, 0, (DWORD_PTR)NULL);
-        return 0;
-    }
-
-    /* reset alias with "close alias" string */
-    sprintf(cmp_str, "close %s", alias_s);
-    if (strstr(cmdbuf, cmp_str))
-    {
-        sprintf(alias_s, "cdaudio");
-        fake_mciSendCommandA(MAGIC_DEVICEID, MCI_CLOSE, 0, (DWORD_PTR)NULL);
-        return 0;
-    }
-
-    /* Handle "set cdaudio/alias time format" */
-    sprintf(cmp_str, "set %s time format", alias_s);
-	DWORD dwNewTimeFormat = -1;
-    if (strstr(cmdbuf, "time format")){
-		static MCI_SET_PARMS parms;
-		char format[81];
-		strcpy(format, "");
-		sscanf(cmdbuf, "time format %s", format);
-		if (sscanf(format, "tmsf"))
-        {
-			dwNewTimeFormat = MCI_FORMAT_TMSF;
-        }
-        else if (sscanf(format, "msf"))
-        {
-			dwNewTimeFormat = MCI_FORMAT_MSF;
-        }
-		else if (sscanf(format, "milliseconds"))
-        {
-			dwNewTimeFormat = MCI_FORMAT_MILLISECONDS;
-        }
+	MCIERROR err;
+	if(TRUE) {
+		static char sPlayerNickName[80+1] = "";
+		char sNickName[80+1];
+		char sCommand[80+1];
+		char sDevice[80+1];
+		char *sCmdTarget;
+		DWORD dwCommand;
 		
-		if(dwNewTimeFormat == -1)
-		{
-			dprintf("unknown time format");
+		char cmdbuf[1024];
+		char cmp_str[1024];
+
+		if(!strcmp(sCommand, "open")) dwCommand = MCI_OPEN; else
+		if(!strcmp(sCommand, "close")) dwCommand = MCI_CLOSE; else
+		if(!strcmp(sCommand, "stop")) dwCommand = MCI_STOP; else
+		if(!strcmp(sCommand, "pause")) dwCommand = MCI_PAUSE; else
+		if(!strcmp(sCommand, "resume")) dwCommand = MCI_RESUME; else
+		if(!strcmp(sCommand, "set")) dwCommand = MCI_SET; else
+		if(!strcmp(sCommand, "status")) dwCommand = MCI_STATUS; else
+		if(!strcmp(sCommand, "play")) dwCommand = MCI_PLAY; else
+		if(!strcmp(sCommand, "seek")) dwCommand = MCI_SEEK; else
+		if(!strcmp(sCommand, "capability")) dwCommand = MCI_GETDEVCAPS; else
+		dwCommand = 0; 
+		
+		if(dwCommand && (dwCommand != MCI_OPEN)){
+			// don't try to parse unknown commands, nor open command that
+			// doesn't necessarily have extra arguments
+			sCmdTarget = (char *)cmd;
+			while (*sCmdTarget && *sCmdTarget != ' ') sCmdTarget++; // skip command
+			while (*sCmdTarget && *sCmdTarget == ' ') sCmdTarget++; // skip first separator
+			while (*sCmdTarget && *sCmdTarget != ' ') sCmdTarget++; // skip deviceid
+			while (*sCmdTarget && *sCmdTarget == ' ') sCmdTarget++; // skip second separator
 		}
-		else
+
+		dprintf("[MCI String = %s]\n", cmd);
+
+		/* copy cmd into cmdbuf */
+		strcpy (cmdbuf,cmd);
+		/* change cmdbuf into lower case */
+		for (int i = 0; cmdbuf[i]; i++)
 		{
-			static MCI_SET_PARMS parms;
-			parms.dwTimeFormat = dwNewTimeFormat;
-			fake_mciSendCommandA(MAGIC_DEVICEID, MCI_SET, MCI_SET_TIME_FORMAT, (DWORD_PTR)(LPVOID)&parms);
+			cmdbuf[i] = tolower(cmdbuf[i]);
+		}
+
+		if (strstr(cmdbuf, "sysinfo cdaudio quantity"))
+		{
+			dprintf("  Returning quantity: 1\r\n");
+			strcpy(ret, "1");
 			return 0;
 		}
-    }
 
-    /* Handle "status cdaudio/alias" */
-    sprintf(cmp_str, "status %s", alias_s);
-    if (strstr(cmdbuf, cmp_str)){
-        if (strstr(cmdbuf, "number of tracks"))
-        {
-            static MCI_STATUS_PARMS parms;
-            parms.dwItem = MCI_STATUS_NUMBER_OF_TRACKS;
-            fake_mciSendCommandA(MAGIC_DEVICEID, MCI_STATUS, MCI_STATUS_ITEM|MCI_WAIT, (DWORD_PTR)&parms);
-            dprintf("  Returning number of tracks (%d)\r\n", numTracks);
-            sprintf(ret, "%d", numTracks);
-            return 0;
-        }
-        int track = 0;
-        if (sscanf(cmdbuf, "status %*s length track %d", &track) == 1)
-        {
-            static MCI_STATUS_PARMS parms;
-            parms.dwItem = MCI_STATUS_LENGTH;
-            parms.dwTrack = track;
-            fake_mciSendCommandA(MAGIC_DEVICEID, MCI_STATUS, MCI_STATUS_ITEM|MCI_TRACK|MCI_WAIT, (DWORD_PTR)&parms);
-            sprintf(ret, "%d", parms.dwReturn);
-            return 0;
-        }
-        if (strstr(cmdbuf, "length"))
-        {
-            static MCI_STATUS_PARMS parms;
-            parms.dwItem = MCI_STATUS_LENGTH;
-            fake_mciSendCommandA(MAGIC_DEVICEID, MCI_STATUS, MCI_STATUS_ITEM, (DWORD_PTR)&parms);
-            sprintf(ret, "%d", parms.dwReturn);
-            return 0;
-        }
-        if (sscanf(cmdbuf, "status %*s type track %d", &track) == 1)
-        {
-            static MCI_STATUS_PARMS parms;
-            parms.dwItem = MCI_CDA_STATUS_TYPE_TRACK;
-			parms.dwTrack = track;
-            fake_mciSendCommandA(MAGIC_DEVICEID, MCI_STATUS, MCI_STATUS_ITEM|MCI_TRACK, (DWORD_PTR)&parms);
-            sprintf(ret, "%d", parms.dwReturn);
-            return 0;
-        }
-        if (sscanf(cmdbuf, "status %*s position track %d", &track) == 1)
-        {
-            static MCI_STATUS_PARMS parms;
-            parms.dwItem = MCI_STATUS_POSITION;
-            parms.dwTrack = track;
-            fake_mciSendCommandA(MAGIC_DEVICEID, MCI_STATUS, MCI_STATUS_ITEM|MCI_TRACK, (DWORD_PTR)&parms);
-            sprintf(ret, "%d", parms.dwReturn);
-            return 0;
-        }
-        if (strstr(cmdbuf, "position"))
-        {
-            static MCI_STATUS_PARMS parms;
-            parms.dwItem = MCI_STATUS_POSITION;
-            fake_mciSendCommandA(MAGIC_DEVICEID, MCI_STATUS, MCI_STATUS_ITEM, (DWORD_PTR)&parms);
-            sprintf(ret, "%d", parms.dwReturn);
-            return 0;
-        }
-        if (strstr(cmdbuf, "mode"))
-        {
-            static MCI_STATUS_PARMS parms;
-            parms.dwItem = MCI_STATUS_MODE;
-            fake_mciSendCommandA(MAGIC_DEVICEID, MCI_STATUS, MCI_STATUS_ITEM|MCI_STATUS_MODE, (DWORD_PTR)&parms);
-            sprintf(ret, "%d", parms.dwReturn);
-            return 0;
-        }
-        if (strstr(cmdbuf, "media present"))
-        {
-            strcpy(ret, "TRUE");
-            return 0;
-        }
-    }
+		/* Example: "sysinfo cdaudio name 1 open" returns "cdaudio" or the alias.*/
+		if (strstr(cmdbuf, "sysinfo cdaudio name"))
+		{
+			dprintf("  Returning name: cdaudio\r\n");
+			sprintf(ret, "%s", alias_s);
+			return 0;
+		}
 
-    /* Handle "play cdaudio/alias" */
-    int from = -1, to = -1;
-    sprintf(cmp_str, "play %s", alias_s);
-    if (strstr(cmdbuf, cmp_str)){
-        if (strstr(cmdbuf, "notify")){
-        notify = 1; /* storing the notify request */
-        }
-        if (sscanf(cmdbuf, "play %*s from %d to %d", &from, &to) == 2)
-        {
-            static MCI_PLAY_PARMS parms;
-            parms.dwFrom = from;
-            parms.dwTo = to;
-            fake_mciSendCommandA(MAGIC_DEVICEID, MCI_PLAY, MCI_FROM|MCI_TO, (DWORD_PTR)&parms);
-            return 0;
-        }
-        if (sscanf(cmdbuf, "play %*s from %d", &from) == 1)
-        {
-            static MCI_PLAY_PARMS parms;
-            parms.dwFrom = from;
-            fake_mciSendCommandA(MAGIC_DEVICEID, MCI_PLAY, MCI_FROM, (DWORD_PTR)&parms);
-            return 0;
-        }
-        if (sscanf(cmdbuf, "play %*s to %d", &to) == 1)
-        {
-            static MCI_PLAY_PARMS parms;
-            parms.dwTo = to;
-            fake_mciSendCommandA(MAGIC_DEVICEID, MCI_PLAY, MCI_TO, (DWORD_PTR)&parms);
-            return 0;
-        }
-    }
+		/* Handle "stop cdaudio/alias" */
+		sprintf(cmp_str, "stop %s", alias_s);
+		if (strstr(cmdbuf, cmp_str))
+		{
+			fake_mciSendCommandA(MAGIC_DEVICEID, MCI_STOP, 0, (DWORD_PTR)NULL);
+			return 0;
+		}
 
-    return 0;
+		/* Handle "pause cdaudio/alias" */
+		sprintf(cmp_str, "pause %s", alias_s);
+		if (strstr(cmdbuf, cmp_str))
+		{
+			fake_mciSendCommandA(MAGIC_DEVICEID, MCI_PAUSE, 0, (DWORD_PTR)NULL);
+			return 0;
+		}
+	
+		/* Handle "pause cdaudio/alias" */
+		if (strstr(cmdbuf, "type pause alias"))
+		{
+			char *tmp_s = strrchr(cmdbuf, ' ');
+			if (tmp_s && *(tmp_s +1))
+			{
+				sprintf(alias_s, "%s", tmp_s +1);
+			}
+			fake_mciSendCommandA(MAGIC_DEVICEID, MCI_PAUSE, 0, (DWORD_PTR)NULL);
+			return 0;
+		}
+
+		/* Look for the use of an alias */
+		/* Example: "open d: type cdaudio alias cd1" */
+		if (strstr(cmdbuf, "type cdaudio alias"))
+		{
+			char *tmp_s = strrchr(cmdbuf, ' ');
+			if (tmp_s && *(tmp_s +1))
+			{
+				sprintf(alias_s, "%s", tmp_s +1);
+			}
+			fake_mciSendCommandA(MAGIC_DEVICEID, MCI_OPEN, 0, (DWORD_PTR)NULL);
+			return 0;
+		}
+
+		if (strstr(cmdbuf, "open cdaudio"))
+		{
+			fake_mciSendCommandA(MAGIC_DEVICEID, MCI_OPEN, 0, (DWORD_PTR)NULL);
+			return 0;
+		}
+
+		/* reset alias with "close alias" string */
+		sprintf(cmp_str, "close %s", alias_s);
+		if (strstr(cmdbuf, cmp_str))
+		{
+			sprintf(alias_s, "cdaudio");
+			fake_mciSendCommandA(MAGIC_DEVICEID, MCI_CLOSE, 0, (DWORD_PTR)NULL);
+			return 0;
+		}
+
+		/* Handle "set cdaudio/alias time format" */
+		sprintf(cmp_str, "set %s time format", alias_s);
+		DWORD dwNewTimeFormat = -1;
+		if (strstr(cmdbuf, "time format")){
+			static MCI_SET_PARMS parms;
+			char format[81];
+			strcpy(format, "");
+			sscanf(cmdbuf, "time format %s", format);
+			if (sscanf(format, "tmsf"))
+			{
+				dwNewTimeFormat = MCI_FORMAT_TMSF;
+			}
+			else if (sscanf(format, "msf"))
+			{
+				dwNewTimeFormat = MCI_FORMAT_MSF;
+			}
+			else if (sscanf(format, "milliseconds"))
+			{
+				dwNewTimeFormat = MCI_FORMAT_MILLISECONDS;
+			}
+			if(dwNewTimeFormat == -1)
+			{
+				dprintf("unknown time format");
+			}
+			else
+			{
+				static MCI_SET_PARMS parms;
+				parms.dwTimeFormat = dwNewTimeFormat;
+				fake_mciSendCommandA(MAGIC_DEVICEID, MCI_SET, MCI_SET_TIME_FORMAT, (DWORD_PTR)(LPVOID)&parms);
+				return 0;
+			}
+		}
+
+		/* Handle "status cdaudio/alias" */
+		sprintf(cmp_str, "status %s", alias_s);
+		if (strstr(cmdbuf, cmp_str)){
+			if (strstr(cmdbuf, "number of tracks"))
+			{
+				static MCI_STATUS_PARMS parms;
+				parms.dwItem = MCI_STATUS_NUMBER_OF_TRACKS;
+				fake_mciSendCommandA(MAGIC_DEVICEID, MCI_STATUS, MCI_STATUS_ITEM|MCI_WAIT, (DWORD_PTR)&parms);
+				dprintf("  Returning number of tracks (%d)\r\n", numTracks);
+				sprintf(ret, "%d", numTracks);
+				return 0;
+			}
+			int track = 0;
+			if (sscanf(cmdbuf, "status %*s length track %d", &track) == 1)
+			{
+				static MCI_STATUS_PARMS parms;
+				parms.dwItem = MCI_STATUS_LENGTH;
+				parms.dwTrack = track;
+				fake_mciSendCommandA(MAGIC_DEVICEID, MCI_STATUS, MCI_STATUS_ITEM|MCI_TRACK|MCI_WAIT, (DWORD_PTR)&parms);
+				sprintf(ret, "%d", parms.dwReturn);
+				return 0;
+			}
+			if (strstr(cmdbuf, "length"))
+			{
+				static MCI_STATUS_PARMS parms;
+				parms.dwItem = MCI_STATUS_LENGTH;
+				fake_mciSendCommandA(MAGIC_DEVICEID, MCI_STATUS, MCI_STATUS_ITEM, (DWORD_PTR)&parms);
+				sprintf(ret, "%d", parms.dwReturn);
+				return 0;
+			}
+			if (sscanf(cmdbuf, "status %*s type track %d", &track) == 1)
+			{
+				static MCI_STATUS_PARMS parms;
+				parms.dwItem = MCI_CDA_STATUS_TYPE_TRACK;
+				parms.dwTrack = track;
+				fake_mciSendCommandA(MAGIC_DEVICEID, MCI_STATUS, MCI_STATUS_ITEM|MCI_TRACK, (DWORD_PTR)&parms);
+				sprintf(ret, "%d", parms.dwReturn);
+				return 0;
+			}
+			if (sscanf(cmdbuf, "status %*s position track %d", &track) == 1)
+			{
+				static MCI_STATUS_PARMS parms;
+				parms.dwItem = MCI_STATUS_POSITION;
+				parms.dwTrack = track;
+				fake_mciSendCommandA(MAGIC_DEVICEID, MCI_STATUS, MCI_STATUS_ITEM|MCI_TRACK, (DWORD_PTR)&parms);
+				sprintf(ret, "%d", parms.dwReturn);
+				return 0;
+			}
+			if (strstr(cmdbuf, "position"))
+			{
+				static MCI_STATUS_PARMS parms;
+				parms.dwItem = MCI_STATUS_POSITION;
+				fake_mciSendCommandA(MAGIC_DEVICEID, MCI_STATUS, MCI_STATUS_ITEM, (DWORD_PTR)&parms);
+				sprintf(ret, "%d", parms.dwReturn);
+				return 0;
+			}
+			if (strstr(cmdbuf, "mode"))
+			{
+				static MCI_STATUS_PARMS parms;
+				parms.dwItem = MCI_STATUS_MODE;
+				fake_mciSendCommandA(MAGIC_DEVICEID, MCI_STATUS, MCI_STATUS_ITEM|MCI_STATUS_MODE, (DWORD_PTR)&parms);
+				sprintf(ret, "%d", parms.dwReturn);
+				return 0;
+			}
+			if (strstr(cmdbuf, "media present"))
+			{
+				strcpy(ret, "TRUE");
+				return 0;
+			}
+		}
+
+		/* Handle "play cdaudio/alias" */
+		int from = -1, to = -1;
+		sprintf(cmp_str, "play %s", alias_s);
+		if (strstr(cmdbuf, cmp_str)){
+			if (strstr(cmdbuf, "notify")){
+			notify = 1; /* storing the notify request */
+			}
+			if (sscanf(cmdbuf, "play %*s from %d to %d", &from, &to) == 2)
+			{
+				static MCI_PLAY_PARMS parms;
+				parms.dwFrom = from;
+				parms.dwTo = to;
+				fake_mciSendCommandA(MAGIC_DEVICEID, MCI_PLAY, MCI_FROM|MCI_TO, (DWORD_PTR)&parms);
+				return 0;
+			}
+			if (sscanf(cmdbuf, "play %*s from %d", &from) == 1)
+			{
+				static MCI_PLAY_PARMS parms;
+				parms.dwFrom = from;
+				fake_mciSendCommandA(MAGIC_DEVICEID, MCI_PLAY, MCI_FROM, (DWORD_PTR)&parms);
+				return 0;
+			}
+			if (sscanf(cmdbuf, "play %*s to %d", &to) == 1)
+			{
+				static MCI_PLAY_PARMS parms;
+				parms.dwTo = to;
+				fake_mciSendCommandA(MAGIC_DEVICEID, MCI_PLAY, MCI_TO, (DWORD_PTR)&parms);
+				return 0;
+			}
+		}
+	}
+    return err;
 }
 
 UINT WINAPI fake_auxGetNumDevs()
