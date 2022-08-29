@@ -910,36 +910,39 @@ MMRESULT WINAPI fake_auxGetVolume(UINT uDeviceID, LPDWORD lpdwVolume)
 
 MMRESULT WINAPI fake_auxSetVolume(UINT uDeviceID, DWORD dwVolume)
 {
-	DWORD registryVolume = 0;
-	DWORD BufferSize;
-	HKEY hlistkey = NULL;
-    HKEY hkey = NULL;
-	int dwIndex=0;
-    char KeyNameBuf[512];
-    DWORD keyNameSizBuf = 512;
-	static DWORD oldVolume = -1;
-	
-    RegOpenKeyEx(HKEY_CURRENT_USER, TEXT("SOFTWARE\\Cavedog Entertainment\\Total Annihilation\\") ,0,KEY_READ, &hlistkey );
-    if(!hlistkey)
-    {
-        dprintf("failed to open registry key\r\n");
-    }
-    while(RegEnumKeyEx(hlistkey,dwIndex++,KeyNameBuf,&keyNameSizBuf,0,NULL,NULL,NULL) == ERROR_SUCCESS )
-    {
 
-        RegOpenKeyEx(hlistkey, KeyNameBuf, 0, KEY_READ | KEY_SET_VALUE, &hkey);
-        if(hkey)
-        {
-            if(RegQueryValueEx(hkey,TEXT("musicvol"), NULL,NULL,(LPBYTE)registryVolume,&BufferSize ) == ERROR_SUCCESS )
-            {
-				dprintf("music volume\r\n", registryVolume);
-				dwVolume = registryVolume;
-            }
-            RegCloseKey(hkey);
-        }        
-    }
+	static DWORD oldVolume = -1;
+	char cmdbuf[256];
+
 	
-    char cmdbuf[256];
+    DWORD dataBuffer;
+    DWORD bufferSize = sizeof(dataBuffer);
+
+    HKEY hkey;
+
+    if (RegOpenKeyExA(HKEY_CURRENT_USER, TEXT("SOFTWARE\\Cavedog Entertainment\\Total Annihilation"), 0, KEY_READ, &hkey) != ERROR_SUCCESS) {
+        printf("failed to open key");
+        return 1;
+    }
+
+    LRESULT status = RegQueryValueEx(
+            hkey,
+            TEXT("musicvol"),
+            NULL,
+            NULL,
+            (LPBYTE)&dataBuffer,
+            &bufferSize);
+
+    if (RegCloseKey(hkey) != ERROR_SUCCESS) {
+        printf("failed to close key");
+        return 1;
+    }
+
+    dprintf("musicvol regkey status: %d\n", status);
+    dprintf("musicvol regkey value: %d\n", dataBuffer);
+    dprintf("musicvol regkey size: %d\n", bufferSize);
+	oldVolume = dataBuffer;
+
 
     dprintf("fake_auxSetVolume(uDeviceId=%08X, dwVolume=%08X)\r\n", uDeviceID, dwVolume);
 
