@@ -16,6 +16,7 @@
 
 /* Code revised by DD (2020) (v.0.2.0.2) */
 
+#include <bass/bass.h>
 #include <windows.h>
 #include <winreg.h>
 #include <stdio.h>
@@ -26,6 +27,18 @@
 
 #define MAGIC_DEVICEID 0xBEEF
 #define MAX_TRACKS 99
+
+/* BASS PLAYER DEFINES START */
+HWND win;
+
+HSTREAM *strs;
+int strc;
+HMUSIC *mods;
+int modc;
+HSAMPLE *sams;
+int samc;
+
+/* BASS PLAYER DEFINES END */
 
 struct track_info
 {
@@ -97,7 +110,7 @@ int player_config(int AudioLibrary, int FileFormat, int PlaybackMode, char Music
 	PlaybackMode = GetPrivateProfileInt("Settings", "PlaybackMode", 0, ConfigFileNameFullPath3);
 	MusicFolder = GetPrivateProfileString("Settings", "MusicFolder", "tamus", musfold, MAX_PATH, ConfigFileNameFullPath3);
 	
-	return AudioLibrary, FileFOrmat, PlaybackMode, MusicFolder;
+	return AudioLibrary, FileFormat, PlaybackMode, MusicFolder;
 }
  
 int player_main(struct play_info *info)
@@ -221,56 +234,124 @@ MCIERROR WINAPI fake_mciSendCommandA(MCIDEVICEID IDDevice, UINT uMsg, DWORD_PTR 
 
     if (fdwCommand & MCI_NOTIFY)
     {
-
+		if(AudioLibrary == 5)
+		{
+			return 0;
+		}
     }
-
+	else
     if (fdwCommand & MCI_WAIT)
     {
-
+		if(AudioLibrary == 5)
+		{
+			return 0;
+		}
     }
-
+	else
     if (uMsg == MCI_OPEN)
     {
-
+		if(AudioLibrary == 5)
+		{
+			if((closed = 1) && (opened = 0))
+			{
+				BASS_Init(1, 44100, 0, win, NULL);
+				BASS_SetDevice(MAGIC_DEVICEID);
+				opened = 1;
+				closed = 0;
+			}
+			return 0;
+		}
     }
 	else
     if (uMsg == MCI_SET)
     {
-		
+		if(AudioLibrary == 5)
+		{
+			return 0;
+		}		
 	}
 	else
     if (uMsg == MCI_CLOSE)
     {
-
+		if(AudioLibrary == 5)
+		{
+			BASS_Free();
+			opened = 0;
+			closed = 1;
+			return 0;
+		}
     }
 	else
     if (uMsg == MCI_PLAY)
     {
+		LPMCI_PLAY_PARMS parms = (LPVOID)dwParam;
+		if (fdwCommand & MCI_FROM)
+		{
+			dprintf("    dwFrom: %d\r\n", parms->dwFrom);
+			if(AudioLibrary == 5)
+			{
+				if (time_format == MCI_FORMAT_TMSF)
+				{
 
+				}
+				HSTREAM str = BASS_StreamCreateFile(TRUE, , 0, 0, 0);
+				playing = 1;
+				else
+				BASS_ErrorGetCode();
+			}
+			// add Milliseconds handling
+			return 0;
     }
 	else
     if (uMsg == MCI_STOP)
     {
-
+		if(AudioLibrary == 5)
+		{
+			if(stopped == 0)
+			{
+				BASS_Pause();
+				BASS_Stop();
+				stopped = 1;
+			}
+			return 0;
+		}
     }
 	else
     if (uMsg == MCI_PAUSE)
     {
-
+		if(AudioLibrary == 5)
+		{
+			if(paused == 0)
+			{
+				BASS_Pause();
+				paused = 1;
+			}	
+			return 0;
+		}
     }
 	else
     if (uMsg == MCI_SYSINFO)
     {
-
+		if(AudioLibrary == 5)
+		{
+			return 0;
+		}
     }
 	else
 	if (uMsg == MCI_INFO)
 	{
-		
+		if(AudioLibrary == 5)
+		{
+			return 0;
+		}		
 	}
 	else
     if (uMsg == MCI_STATUS)
     {
+		if(AudioLibrary == 5)
+		{
+			return 0;
+		}
     }
 
     /* fallback */
