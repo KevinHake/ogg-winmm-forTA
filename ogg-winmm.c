@@ -285,6 +285,12 @@ MCIERROR WINAPI fake_mciSendCommandA(MCIDEVICEID IDDevice, UINT uMsg, DWORD_PTR 
     if (uMsg == MCI_PLAY)
     {
 		LPMCI_PLAY_PARMS parms = (LPVOID)dwParam;
+		if(paused == 1)
+		{
+			BASS_Start();
+			paused = 0;
+		}
+		else
 		if (fdwCommand & MCI_FROM)
 		{
 			dprintf("    dwFrom: %d\r\n", parms->dwFrom);
@@ -292,15 +298,47 @@ MCIERROR WINAPI fake_mciSendCommandA(MCIDEVICEID IDDevice, UINT uMsg, DWORD_PTR 
 			{
 				if (time_format == MCI_FORMAT_TMSF)
 				{
+                    info.first = MCI_TMSF_TRACK(parms->dwFrom);
 
+                    dprintf("      TRACK  %d\n", MCI_TMSF_TRACK(parms->dwFrom));
+                    dprintf("      MINUTE %d\n", MCI_TMSF_MINUTE(parms->dwFrom));
+                    dprintf("      SECOND %d\n", MCI_TMSF_SECOND(parms->dwFrom));
+                    dprintf("      FRAME  %d\n", MCI_TMSF_FRAME(parms->dwFrom));
 				}
-				HSTREAM str = BASS_StreamCreateFile(TRUE, , 0, 0, 0);
+                else if (time_format == MCI_FORMAT_MILLISECONDS)
+                {
+                    info.first = 0;
+
+                    for (int i = 0; i < MAX_TRACKS; i++)
+                    {
+                        // FIXME: take closest instead of absolute
+                        if (tracks[i].position == parms->dwFrom / 1000)
+                        {
+                            info.first = i;
+                        }
+                    }
+
+                    dprintf("      mapped milliseconds to %d\n", info.first);
+                }
+                else
+                {
+                    // FIXME: not really
+                    info.first = parms->dwFrom;
+                }
+                if (info.first < firstTrack)
+				{
+                    info.first = firstTrack;
+				}
+                if (info.first > lastTrack)
+				{
+                    info.first = lastTrack;
+				}
+                info.last = info.first;
+				HSTREAM str = BASS_StreamCreateFile(FALSE, tracks[current].path, 0, 0, 0);
 				playing = 1;
-				else
-				BASS_ErrorGetCode();
 			}
-			// add Milliseconds handling
 			return 0;
+		}
     }
 	else
     if (uMsg == MCI_STOP)
@@ -312,6 +350,7 @@ MCIERROR WINAPI fake_mciSendCommandA(MCIDEVICEID IDDevice, UINT uMsg, DWORD_PTR 
 				BASS_Pause();
 				BASS_Stop();
 				stopped = 1;
+				playing = 0;
 			}
 			return 0;
 		}
@@ -325,6 +364,7 @@ MCIERROR WINAPI fake_mciSendCommandA(MCIDEVICEID IDDevice, UINT uMsg, DWORD_PTR 
 			{
 				BASS_Pause();
 				paused = 1;
+				playing = 0;
 			}	
 			return 0;
 		}
