@@ -282,34 +282,9 @@ MCIERROR WINAPI fake_mciSendCommandA(MCIDEVICEID IDDevice, UINT uMsg, DWORD_PTR 
 
 						time_format = parms->dwTimeFormat;
 
-						if (parms->dwTimeFormat == MCI_FORMAT_BYTES)
-						{
-							dprintf("      MCI_FORMAT_BYTES\r\n");
-						}
-						else
-						if (parms->dwTimeFormat == MCI_FORMAT_FRAMES)
-						{
-							dprintf("      MCI_FORMAT_FRAMES\r\n");
-						}
-						else
-						if (parms->dwTimeFormat == MCI_FORMAT_HMS)
-						{
-							dprintf("      MCI_FORMAT_HMS\r\n");
-						}
-						else
 						if (parms->dwTimeFormat == MCI_FORMAT_MILLISECONDS)
 						{
 							dprintf("      MCI_FORMAT_MILLISECONDS\r\n");
-						}
-						else
-						if (parms->dwTimeFormat == MCI_FORMAT_MSF)
-						{
-							dprintf("      MCI_FORMAT_MSF\r\n");
-						}
-						else
-						if (parms->dwTimeFormat == MCI_FORMAT_SAMPLES)
-						{
-							dprintf("      MCI_FORMAT_SAMPLES\r\n");
 						}
 						else
 						if (parms->dwTimeFormat == MCI_FORMAT_TMSF)
@@ -442,6 +417,162 @@ MCIERROR WINAPI fake_mciSendCommandA(MCIDEVICEID IDDevice, UINT uMsg, DWORD_PTR 
     {
 		if(AudioLibrary == 5)
 		{
+            LPMCI_STATUS_PARMS parms = (LPVOID)dwParam;
+
+            dprintf("  MCI_STATUS\r\n");
+
+            parms->dwReturn = 0;
+
+            if (fdwCommand & MCI_TRACK)
+            {
+                dprintf("    MCI_TRACK\r\n");
+                dprintf("      dwTrack = %d\r\n", parms->dwTrack);
+            }
+			else
+            if (fdwCommand & MCI_STATUS_ITEM)
+            {
+                dprintf("    MCI_STATUS_ITEM\r\n");
+
+                if (parms->dwItem == MCI_STATUS_CURRENT_TRACK)
+                {
+                    dprintf("      MCI_STATUS_CURRENT_TRACK\r\n");
+					parms->dwReturn = parms->dwTrack;
+                }
+				else
+                if (parms->dwItem == MCI_STATUS_LENGTH)
+                {
+                    dprintf("      MCI_STATUS_LENGTH\r\n");
+
+                    /* Get track length */
+                    if(fdwCommand & MCI_TRACK)
+                    {
+                        int seconds = tracks[parms->dwTrack].length;
+                        if (time_format == MCI_FORMAT_MILLISECONDS)
+                        {
+                            parms->dwReturn = seconds * 1000;
+                        }
+                        else
+                        {
+                            parms->dwReturn = MCI_MAKE_MSF(seconds / 60, seconds % 60, 0);
+                        }
+                    }
+                    /* Get full length */
+                    else
+                    {
+                        if (time_format == MCI_FORMAT_MILLISECONDS)
+                        {
+                            parms->dwReturn = (tracks[lastTrack].position + tracks[lastTrack].length) * 1000;
+                        }
+                        else
+                        {
+                            parms->dwReturn = MCI_MAKE_TMSF(lastTrack, 0, 0, 0);
+                        }
+                    }
+                }
+				else
+                if (parms->dwItem == MCI_CDA_STATUS_TYPE_TRACK)
+                {
+                    dprintf("      MCI_CDA_STATUS_TYPE_TRACK\r\n");
+                    /*Fix from the Dxwnd project*/
+                    /* ref. by WinQuake */
+                    if((parms->dwTrack > 0) &&  (parms->dwTrack , MAX_TRACKS)){
+                        if(tracks[parms->dwTrack].length > 0)
+                            parms->dwReturn = MCI_CDA_TRACK_AUDIO; 
+                    }
+                }
+				else
+                if (parms->dwItem == MCI_STATUS_MEDIA_PRESENT)
+                {
+                    dprintf("      MCI_STATUS_MEDIA_PRESENT\r\n");
+                    parms->dwReturn = TRUE;
+                }
+				else
+                if (parms->dwItem == MCI_STATUS_NUMBER_OF_TRACKS)
+                {
+                    dprintf("      MCI_STATUS_NUMBER_OF_TRACKS\r\n");
+                    parms->dwReturn = numTracks;
+                }
+				else
+                if (parms->dwItem == MCI_STATUS_POSITION)
+                {
+                    /* Track position */
+                    dprintf("      MCI_STATUS_POSITION\r\n");
+
+                    if (fdwCommand & MCI_TRACK)
+                    {
+                        if (time_format == MCI_FORMAT_MILLISECONDS)
+                            /* FIXME: implying milliseconds */
+                            parms->dwReturn = tracks[parms->dwTrack].position * 1000;
+                        else /* TMSF */
+                            parms->dwReturn = MCI_MAKE_TMSF(parms->dwTrack, 0, 0, 0);
+                    }
+                    else {
+                        /* Current position */
+                        int track = current % 0xFF;
+                        if (time_format == MCI_FORMAT_MILLISECONDS)
+                            parms->dwReturn = tracks[track].position * 1000;
+                        else /* TMSF */
+                            parms->dwReturn = MCI_MAKE_TMSF(track, 0, 0, 0);
+                    }
+                }
+				else
+                if (parms->dwItem == MCI_STATUS_MODE)
+                {
+                    dprintf("      MCI_STATUS_MODE\r\n");
+                    
+                    if(paused)
+					{ 
+                        dprintf("        we are paused\r\n");
+                        parms->dwReturn = MCI_MODE_PAUSE;
+					}
+                    else
+                    if(stopped)
+					{
+                        dprintf("        we are paused\r\n");
+                        parms->dwReturn = MCI_MODE_STOP;
+					}
+					else
+                    if(opened)
+					{
+                        dprintf("        we are paused\r\n");
+                        parms->dwReturn = MCI_MODE_OPEN;
+					}
+					else
+                    if(playing)
+					{ 
+                        dprintf("        we are paused\r\n");
+                        parms->dwReturn = MCI_MODE_PLAY;
+					}
+                }
+				else
+                if (parms->dwItem == MCI_STATUS_READY)
+                {
+                    dprintf("      MCI_STATUS_READY\r\n");
+                    /*Fix from the Dxwnd project*/
+                    /* referenced by Quake/cd_win.c */
+                    parms->dwReturn = TRUE; /* TRUE=ready, FALSE=not ready */
+                }
+				else
+                if (parms->dwItem == MCI_STATUS_TIME_FORMAT)
+                {
+                    dprintf("      MCI_STATUS_TIME_FORMAT\r\n");
+					if(time_format == MCI_FORMAT_MILLISECONDS)
+					{
+						parms->dwReturn = MCI_FORMAT_MILLISECONDS;
+					}
+					else
+					if(time_format == MCI_FORMAT_TMSF)
+					{
+						parms->dwReturn = MCI_FORMAT_TMSF;
+					}
+                }
+				else
+                if (parms->dwItem == MCI_STATUS_START)
+                {
+                    dprintf("      MCI_STATUS_START\r\n");
+                }
+            }
+            dprintf("  dwReturn %d\n", parms->dwReturn);
 			return 0;
 		}
     }
