@@ -76,7 +76,6 @@ int firstTrack = -1;
 int lastTrack = 0;
 int numTracks = 1; /* +1 for data track on mixed mode cd's */
 DWORD dwCurTimeFormat = -1;
-char music_path[2048];
 int time_format = MCI_FORMAT_TMSF;
 CRITICAL_SECTION cs;
 char alias_s[100] = "cdaudio";
@@ -85,9 +84,15 @@ static struct play_info info = { -1, -1 };
 int AudioLibrary;
 int FileFormat;
 int PlaybackMode;
-char MusicFolder;
-char musfold[255];
+char MusicFolder[255];
 
+BOOL FileExists(LPCTSTR szPath)
+{
+  DWORD dwAttrib = GetFileAttributes(szPath);
+
+  return (dwAttrib != INVALID_FILE_ATTRIBUTES && 
+         !(dwAttrib & FILE_ATTRIBUTE_DIRECTORY));
+}
 
 /* NOTE: The player is currently incapable of playing tracks from a specified
  * position. Instead it plays whole tracks only. Previous pause logic using
@@ -95,22 +100,24 @@ char musfold[255];
  * proper seek commands to support playback from arbitrary positions on the track.
  */
  
-int player_config(int AudioLibrary, int FileFormat, int PlaybackMode, char MusicFolder)
+/* Get audio settings from <exe dir>/wgmmus.ini, set in global variables */
+void player_config()
 {
-	TCHAR ConfigFileNameFullPath3[MAX_PATH];
-	LPCSTR ConfigFileName3 = "wgmus.ini";
+	TCHAR ConfigFileNameFullPath[MAX_PATH];
+	LPCSTR ConfigFileName = "wgmus.ini";
 
-	*(strrchr(ConfigFileNameFullPath3, '\\')+1)=0;
-	strcat(ConfigFileNameFullPath3,ConfigFileName3);
+	*(strrchr(ConfigFileNameFullPath, '\\')+1)=0;
+	strcat(ConfigFileNameFullPath,ConfigFileName3);
 	
-	dprintf("where is our config file?:%s\r\n", ConfigFileNameFullPath3);
-
-	AudioLibrary = GetPrivateProfileInt("Settings", "AudioLibrary", 0, ConfigFileNameFullPath3);
-	FileFormat = GetPrivateProfileInt("Settings", "FileFormat", 0, ConfigFileNameFullPath3);
-	PlaybackMode = GetPrivateProfileInt("Settings", "PlaybackMode", 0, ConfigFileNameFullPath3);
-	MusicFolder = GetPrivateProfileString("Settings", "MusicFolder", "tamus", musfold, MAX_PATH, ConfigFileNameFullPath3);
+	if(FileExists(ConfigFileNameFullPath3)) { dprintf("Reading audio settings from: %s\r\n", ConfigFileNameFullPath); }
+	else { dprintf("Audio settings file %s does not exist.\r\n", ConfigFileNameFullPath); }
 	
-	return AudioLibrary, FileFormat, PlaybackMode, MusicFolder;
+	AudioLibrary = GetPrivateProfileInt("Settings", "AudioLibrary", 0, ConfigFileNameFullPath);
+	FileFormat = GetPrivateProfileInt("Settings", "FileFormat", 0, ConfigFileNameFullPath);
+	PlaybackMode = GetPrivateProfileInt("Settings", "PlaybackMode", 0, ConfigFileNameFullPath);
+	GetPrivateProfileString("Settings", "MusicFolder", "tamus", MusicFolder, MAX_PATH, ConfigFileNameFullPath);
+	
+	return;
 }
  
 int player_main(struct play_info *info)
@@ -155,7 +162,6 @@ int player_main(struct play_info *info)
         MCI_STATUS_MODE does not update to show that the track is no longer playing.
         Bug or broken design in mcicda.dll (also noted by the Wine team) */
     }
-	player_config;
     return 0;
 }
 
@@ -166,26 +172,16 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
 #ifdef _DEBUG
         fh = fopen("winmm.log", "w"); /* Renamed to .log*/
 #endif
-        GetModuleFileName(hinstDLL, music_path, sizeof music_path);
+		player_config();
 
-        memset(tracks, 0, sizeof tracks);
-
-        char *last = strrchr(music_path, '\\');
-        if (last)
-        {
-            *last = '\0';
-        }
-		const char *mF = &MusicFolder;
-        strncat(music_path, mF, sizeof music_path - 1);
-
-        dprintf("TA-winmm music directory is %s\r\n", music_path);
+        dprintf("TA-winmm music directory is %s\r\n", MusicFolder);
         dprintf("TA-winmm searching tracks...\r\n");
 
         unsigned int position = 0;
 
         for (int i = 1; i < MAX_TRACKS; i++) /* "Changed: int i = 0" to "1" we can skip track00.ogg" */
         {
-			snprintf(tracks[i].path, sizeof tracks[i].path, "%s\\%02d.ogg", music_path, i);
+			snprintf(tracks[i].path, sizeof tracks[i].path, "%s\\%02d.ogg", MusicFolder, i);
             tracks[i].length = plr_length(tracks[i].path);
             tracks[i].position = position;
 
