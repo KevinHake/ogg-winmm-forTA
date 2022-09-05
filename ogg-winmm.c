@@ -236,6 +236,7 @@ MCIERROR WINAPI fake_mciSendCommandA(MCIDEVICEID IDDevice, UINT uMsg, DWORD_PTR 
     {
 		if(AudioLibrary == 5)
 		{
+			SendMessageA((HWND)0xffff, MM_MCINOTIFY, MCI_NOTIFY_SUCCESSFUL, 0xBEEF);
 			return 0;
 		}
     }
@@ -267,6 +268,57 @@ MCIERROR WINAPI fake_mciSendCommandA(MCIDEVICEID IDDevice, UINT uMsg, DWORD_PTR 
     {
 		if(AudioLibrary == 5)
 		{
+			if (IDDevice == MAGIC_DEVICEID || IDDevice == 0 || IDDevice == 0xFFFFFFFF)
+			{
+				if (uMsg == MCI_SET)
+				{
+					LPMCI_SET_PARMS parms = (LPVOID)dwParam;
+
+					dprintf("  MCI_SET\r\n");
+
+					if (fdwCommand & MCI_SET_TIME_FORMAT)
+					{
+						dprintf("    MCI_SET_TIME_FORMAT\r\n");
+
+						time_format = parms->dwTimeFormat;
+
+						if (parms->dwTimeFormat == MCI_FORMAT_BYTES)
+						{
+							dprintf("      MCI_FORMAT_BYTES\r\n");
+						}
+						else
+						if (parms->dwTimeFormat == MCI_FORMAT_FRAMES)
+						{
+							dprintf("      MCI_FORMAT_FRAMES\r\n");
+						}
+						else
+						if (parms->dwTimeFormat == MCI_FORMAT_HMS)
+						{
+							dprintf("      MCI_FORMAT_HMS\r\n");
+						}
+						else
+						if (parms->dwTimeFormat == MCI_FORMAT_MILLISECONDS)
+						{
+							dprintf("      MCI_FORMAT_MILLISECONDS\r\n");
+						}
+						else
+						if (parms->dwTimeFormat == MCI_FORMAT_MSF)
+						{
+							dprintf("      MCI_FORMAT_MSF\r\n");
+						}
+						else
+						if (parms->dwTimeFormat == MCI_FORMAT_SAMPLES)
+						{
+							dprintf("      MCI_FORMAT_SAMPLES\r\n");
+						}
+						else
+						if (parms->dwTimeFormat == MCI_FORMAT_TMSF)
+						{
+							dprintf("      MCI_FORMAT_TMSF\r\n");
+						}
+					}
+				}
+			}
 			return 0;
 		}		
 	}
