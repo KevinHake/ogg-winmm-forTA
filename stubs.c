@@ -13,7 +13,7 @@ HINSTANCE getWinmmHandle()
 void ExitMonitor(LPVOID DLLHandle)
 {
     WaitForSingleObject(DLLHandle, INFINITE);
-    FreeLibrary(getWinmmHandle());
+    FreeLibraryAndExitThread(getWinmmHandle());
 }
 
 /* if winmm.dll is already loaded, return its handle */
